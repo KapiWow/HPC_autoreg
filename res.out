@@ -1,0 +1,18 @@
+acf_size:           (12,12,12)
+zsize:              (1000,32,32)
+zsize2:             (1400,44,44)
+zdelta:             (1,1,1)
+size_factor:        1.4
+ACF variance = 1
+WN variance = 0.00616312
+mean(eps) = 1.09397e-05
+variance(eps) = 0.00616249
+mean(zeta) = 9.44948e-06
+variance(zeta) = 0.69978
+compute_AR_coefs   1414308
+generate_white_noise   166459
+generate_zeta   7820073
+
+real	0m11.671s
+user	0m10.247s
+sys	0m0.162s
