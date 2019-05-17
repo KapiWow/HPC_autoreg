@@ -19,6 +19,12 @@
 #include "types.hh"              // for size3, ACF, AR_coefs, Zeta, Array2D
 #include "voodoo.hh"             // for generate_AC_matrix
 
+#include <condition_variable>
+#include <mutex>   
+#include <queue>
+#include <atomic>
+#include <thread>
+
 /// @file
 /// File with subroutines for AR model, Yule-Walker equations
 /// and some others.
@@ -165,35 +171,110 @@ namespace autoreg {
 			int x;
 			int y;
 		};
-		std::vector<Task> tasks;
-		for (int s=0; s<=(t1+x1+y1-3); s++) {
-		//for (int s=0; s<=3; s++) {
-			int count = s;
-			const int start_t = std::max(0,count-x1-y1-2);
-			const int end_t = std::min(count,t1-1);
-			//std::cout << s << std::endl;
-			for (int t=start_t; t<=end_t; t++) {
-				count = s-t;
-				const int start_x = std::max(0,count-y1-1);
-				const int end_x = std::min(count,y1-1);
-				for (int x=start_x; x<=end_x; x++) {
-					//count -= x;
-					count = s-t-x;
-					Task task;
-					task.t = t;
-					task.x = x;
-					task.y = count;
-					tasks.push_back(task);
-					//std::cout << t << " : " << x << " : " << count << std::endl;
+
+
+		//std::vector<Task> tasks;
+		//for (int s=0; s<=(t1+x1+y1-3); s++) {
+		////for (int s=0; s<=3; s++) {
+		//	int count = s;
+		//	const int start_t = std::max(0, count-x1-y1-2);
+		//	const int end_t = std::min(count, t1-1);
+		//	//std::cout << s << std::endl;
+		//	for (int t=start_t; t<=end_t; t++) {
+		//		count = s-t;
+		//		const int start_x = std::max(0,count-y1-1);
+		//		const int end_x = std::min(count,y1-1);
+		//		for (int x=start_x; x<=end_x; x++) {
+		//			//count -= x;
+		//			count = s-t-x;
+		//			Task task;
+		//			task.t = t;
+		//			task.x = x;
+		//			task.y = count;
+		//			tasks.push_back(task);
+		//			//std::cout << t << " : " << x << " : " << count << std::endl;
+		//		}
+		//	}
+		//	#pragma omp parallel for
+		//	for (size_t ii=0; ii<tasks.size(); ii++) {
+		//		int t = tasks[ii].t;
+		//		int x = tasks[ii].x;
+		//		int y = tasks[ii].y;
+		//		//if (t > 1390)
+		//		//	std::cout << t << " : " << x << " : " << y << std::endl;
+		//		const int m1 = std::min(t+1, fsize[0]);
+		//		const int m2 = std::min(x+1, fsize[1]);
+		//		const int m3 = std::min(y+1, fsize[2]);
+		//		T sum = 0;
+		//		for (int k=0; k<m1; k++)
+		//			for (int i=0; i<m2; i++)
+		//				for (int j=0; j<m3; j++)
+		//					sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
+		//		#pragma omp atomic
+		//		zeta(t, x, y) += sum;
+		//	}
+		//	tasks.clear();
+		//}
+
+
+		std::queue<Task> tasks;
+		std::vector<std::vector<std::vector<int>>> matrix;
+		std::mutex mtx;
+		//std::mutex mtxTable;
+		std::condition_variable cv;
+
+		for (int i = 0; i < t1; i++) {
+			
+			std::vector<std::vector<int>> a;
+			for (int j = 0; j < x1; j++) {
+				std::vector<int> b;
+				for (int k = 0; k < y1; k++) {
+					int c = 3;
+					if (i == 0)
+						c -= 1;	
+					if (j == 0)
+						c -= 1;	
+					if (k == 0)
+						c -= 1;	
+					
+					
+					if (c==3)
+						c = 7;
+					else if (c==2)
+						c = 3;
+
+					b.push_back(c);
 				}
-			}
-			#pragma omp parallel for
-			for (size_t i=0; i<tasks.size(); i++) {
-				int t = tasks[i].t;
-				int x = tasks[i].x;
-				int y = tasks[i].y;
-				//if (t > 1390)
-				//	std::cout << t << " : " << x << " : " << y << std::endl;
+				a.push_back(b);
+			}	
+			matrix.push_back(a);
+		}
+
+		std::cout << matrix[0][0][0] << std::endl;
+		Task task;
+		task.t = 0;
+		task.x = 0;
+		task.y = 0;
+		tasks.push(task);
+		std::cout << t1 << "  " << x1 << "   " << y1 << std::endl;
+		
+		std::atomic<bool> stopped{false};
+		#pragma omp parallel
+		{
+		std::unique_lock<std::mutex> lock{mtx};
+		cv.wait(lock, [&stopped, &matrix, &tasks, &lock, &zeta, &phi, &fsize, t1, x1, y1, &cv] () {
+			while(!tasks.empty()) {
+				Task task = tasks.front();
+				tasks.pop();
+				//std::unlock_guard unlock{mtx};
+				//lock.unlock();
+				
+				int t = task.t;
+				int x = task.x;
+				int y = task.y;
+				//std::cout << t <<"   "<< x <<"   "<< y << std::endl;
+				std::cout << t + x + y << std::endl;
+				lock.unlock();
 				const int m1 = std::min(t+1, fsize[0]);
 				const int m2 = std::min(x+1, fsize[1]);
 				const int m3 = std::min(y+1, fsize[2]);
@@ -204,9 +285,83 @@ namespace autoreg {
 							sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
 				#pragma omp atomic
 				zeta(t, x, y) += sum;
+				
+				std::vector<Task> newTasks;
+				newTasks.push_back(Task{t+1, x, y});
+				newTasks.push_back(Task{t, x+1, y});
+				newTasks.push_back(Task{t, x, y+1});
+				newTasks.push_back(Task{t+1, x+1, y});
+				newTasks.push_back(Task{t+1, x, y+1});
+				newTasks.push_back(Task{t, x+1, y+1});
+				newTasks.push_back(Task{t+1, x+1, y+1});
+				lock.lock();
+				for (size_t tn = 0; tn < newTasks.size(); tn++) {
+					if ((newTasks[tn].t<t1)&&
+							(newTasks[tn].x<x1)&&
+							(newTasks[tn].y<y1)) {
+						matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] -= 1;
+						if (matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] == 0) {
+							tasks.push(newTasks[tn]);
+							cv.notify_one();
+						}
+					}
+				}
+				if ((t==t1-1)&&(x==x1-1)&&(y==y1-1))
+					stopped = true;
+				//lock.unlock();
+
 			}
-			tasks.clear();
+			bool res = stopped;
+			return res;
+		});
 		}
+		
+
+
+		//for (int s=0; s<=(t1+x1+y1-3); s++) {
+		//	int count = s;
+		//	const int start_t = std::max(0, count-x1-y1-2);
+		//	const int end_t = std::min(count, t1-1);
+		//	//std::cout << s << std::endl;
+		//	for (int t=start_t; t<=end_t; t++) {
+		//		count = s-t;
+		//		const int start_x = std::max(0,count-y1-1);
+		//		const int end_x = std::min(count,y1-1);
+		//		for (int x=start_x; x<=end_x; x++) {
+		//			//count -= x;
+		//			count = s-t-x;
+		//			Task task;
+		//			task.t = t;
+		//			task.x = x;
+		//			task.y = count;
+		//			tasks.push_back(task);
+		//			//std::cout << t << " : " << x << " : " << count << std::endl;
+		//		}
+		//	}
+		//	#pragma omp parallel for
+		//	for (size_t ii=0; ii<tasks.size(); ii++) {
+		//		int t = tasks[ii].t;
+		//		int x = tasks[ii].x;
+		//		int y = tasks[ii].y;
+		//		//if (t > 1390)
+		//		//	std::cout << t << " : " << x << " : " << y << std::endl;
+		//		const int m1 = std::min(t+1, fsize[0]);
+		//		const int m2 = std::min(x+1, fsize[1]);
+		//		const int m3 = std::min(y+1, fsize[2]);
+		//		T sum = 0;
+		//		for (int k=0; k<m1; k++)
+		//			for (int i=0; i<m2; i++)
+		//				for (int j=0; j<m3; j++)
+		//					sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
+		//		#pragma omp atomic
+		//		zeta(t, x, y) += sum;
+		//	}
+		//	tasks.clear();
+		//}
+
+
+
+
 		//for (int t=0; t<t1; t++) {
 		//	for (int x=0; x<x1; x++) {
 		//		for (int y=0; y<y1; y++) {
