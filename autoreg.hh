@@ -222,9 +222,12 @@ namespace autoreg {
 		std::mutex mtx;
 		//std::mutex mtxTable;
 		std::condition_variable cv;
+		size_t t_step = 10;
+		size_t x_step = 4;
+		size_t y_step = 4;
+
 
 		for (int i = 0; i < t1; i++) {
-			
 			std::vector<std::vector<int>> a;
 			for (int j = 0; j < x1; j++) {
 				std::vector<int> b;
@@ -273,7 +276,7 @@ namespace autoreg {
 				int x = task.x;
 				int y = task.y;
 				//std::cout << t <<"   "<< x <<"   "<< y << std::endl;
-				std::cout << t + x + y << std::endl;
+				//std::cout << t + x + y << std::endl;
 				lock.unlock();
 				const int m1 = std::min(t+1, fsize[0]);
 				const int m2 = std::min(x+1, fsize[1]);
@@ -306,13 +309,17 @@ namespace autoreg {
 						}
 					}
 				}
-				if ((t==t1-1)&&(x==x1-1)&&(y==y1-1))
+				if ((t==t1-1)&&(x==x1-1)&&(y==y1-1)) {
 					stopped = true;
+					//std::cout << "stopped" << std::endl;
+					cv.notify_all();
+				}
 				//lock.unlock();
 
 			}
-			bool res = stopped;
-			return res;
+			return stopped.load();
+			//bool res = stopped;
+			//return res;
 		});
 		}
 		
