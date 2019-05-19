@@ -1,5 +1,6 @@
 #include <fstream>
 #include <string>
+#include <chrono>
 
 #include "parallel_mt.hh"
 
@@ -7,7 +8,7 @@ int main() {
 
 	using namespace autoreg;
 
-	parallel_mt_seq<521> seq(1234);
+	parallel_mt_seq<521> seq(std::chrono::steady_clock::now().time_since_epoch().count());
 	//a = seq();
 	
 	int mt_count = 32;

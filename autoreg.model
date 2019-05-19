@@ -1,4 +1,4 @@
 size_factor=1.4
-zsize=(1000,62,62)
+zsize=(1000,64,64)
 zdelta=(1,1,1)
 acf_size=(10,10,10)

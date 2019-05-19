@@ -142,11 +142,8 @@ namespace autoreg {
 			throw std::runtime_error("variance is less than zero");
 		}
 
-		// инициализация генератора
-		//std::mt19937 generator;
-		//#if !defined(DISABLE_RANDOM_SEED)
-		//generator.seed(std::chrono::steady_clock::now().time_since_epoch().count());
-		//#endif
+		Zeta<T> eps(size);
+		
 		
 
 		std::vector<parallel_mt> generators;
@@ -172,41 +169,32 @@ namespace autoreg {
 
 
 
+		parallel_mt generator(generators[0]);
 		// генерация и проверка
-		Zeta<T> eps(size);
-		//std::mutex
-		
-		//std::cout<<size[2]<<std::endl;
 		#pragma omp parallel for 
 		for (int i = 0; i < size[0]; i++) {
         	int tid = omp_get_thread_num();
+        	//int tid = 0;
 			std::normal_distribution<T> normal(T(0), std::sqrt(variance));
-			//
-			//#pragma omp critical
-			
-				//parallel_mt generator(generators[0]);
-			parallel_mt generator(generators[tid]);
-				//generator = generators[tid];
 			
 			
-			//std::ifstream fin("3_tast/mt_0");
-			//mt_config conf;
-			//fin >> conf;
-			//parallel_mt generator(generators[tid]);
+			
 			for (int j = 0; j < size[1]; j++) {
 				for (int k = 0; k < size[2]; k++) {
-					//if (tid == 0)
-					//	std::cout<< "12312312"<<std::endl;
-					eps(i,j,k) = normal(generator);
-					//eps(i,j,k) = normal(generators[tid]);
-					//eps(j,i,k) = normal(generators[tid]);
+					//eps(i,j,k) = normal(generator);
+					eps(i,j,k) = normals[tid](generators[tid]);
 				}
 			}
 		}
+		
+		////инициализация генератора
+		//std::mt19937 generator;
+		//#if !defined(DISABLE_RANDOM_SEED)
+		//generator.seed(std::chrono::steady_clock::now().time_since_epoch().count());
+		//#endif
 
 		//std::normal_distribution<T> normal(T(0), std::sqrt(variance));
 		//std::generate(std::begin(eps), std::end(eps), std::bind(normal, generator));
-		//std::generate(std::begin(eps), std::end(eps), std::bind(normal, generator[0]));
 		if (std::any_of(std::begin(eps), std::end(eps), &::autoreg::isnan<T>)) {
 			throw std::runtime_error("white noise generator produced some NaNs");
 		}
@@ -231,52 +219,6 @@ namespace autoreg {
 		};
 
 
-		//std::vector<Task> tasks;
-		//for (int s=0; s<=(t1+x1+y1-3); s++) {
-		////for (int s=0; s<=3; s++) {
-		//	int count = s;
-		//	const int start_t = std::max(0, count-x1-y1-2);
-		//	const int end_t = std::min(count, t1-1);
-		//	//std::cout << s << std::endl;
-		//	for (int t=start_t; t<=end_t; t++) {
-		//		count = s-t;
-		//		const int start_x = std::max(0,count-y1-1);
-		//		const int end_x = std::min(count,y1-1);
-		//		for (int x=start_x; x<=end_x; x++) {
-		//			//count -= x;
-		//			count = s-t-x;
-		//			Task task;
-		//			task.t = t;
-		//			task.x = x;
-		//			task.y = count;
-		//			tasks.push_back(task);
-		//			//std::cout << t << " : " << x << " : " << count << std::endl;
-		//		}
-		//	}
-		//	#pragma omp parallel for
-		//	for (size_t ii=0; ii<tasks.size(); ii++) {
-		//		int t = tasks[ii].t;
-		//		int x = tasks[ii].x;
-		//		int y = tasks[ii].y;
-		//		//if (t > 1390)
-		//		//	std::cout << t << " : " << x << " : " << y << std::endl;
-		//		const int m1 = std::min(t+1, fsize[0]);
-		//		const int m2 = std::min(x+1, fsize[1]);
-		//		const int m3 = std::min(y+1, fsize[2]);
-		//		T sum = 0;
-		//		for (int k=0; k<m1; k++)
-		//			for (int i=0; i<m2; i++)
-		//				for (int j=0; j<m3; j++)
-		//					sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
-		//		#pragma omp atomic
-		//		zeta(t, x, y) += sum;
-		//	}
-		//	tasks.clear();
-		//}
-
-
-
-
 		//=========================================================================
 		//
 
@@ -286,18 +228,21 @@ namespace autoreg {
 		//std::mutex mtxTable;
 		std::condition_variable cv;
 		size_t t_step = 40;
+		//size_t t_step = 40;
 		size_t x_step = 8;
 		size_t y_step = 8;
 		//size_t t_step = 50;
 		//size_t x_step = 8;
 		//size_t y_step = 8;
+		size_t t_count = ((t1 + t_step - 1)/t_step);
+		size_t x_count = ((x1 + x_step - 1)/x_step);
+		size_t y_count = ((y1 + y_step - 1)/y_step);
 
-
-		for (int i = 0; i < t1/t_step; i++) {
+		for (size_t i = 0; i < t_count; i++) {
 			std::vector<std::vector<int>> a;
-			for (int j = 0; j < x1/x_step; j++) {
+			for (int j = 0; j < x_count; j++) {
 				std::vector<int> b;
-				for (int k = 0; k < y1/y_step; k++) {
+				for (int k = 0; k < y_count; k++) {
 					int c = 3;
 					if (i == 0)
 						c -= 1;	
@@ -332,7 +277,10 @@ namespace autoreg {
 		{
 		std::unique_lock<std::mutex> lock{mtx};
 		cv.wait(lock, [&stopped, &matrix, &tasks, &lock, &zeta, &phi, &fsize, &t1, &x1, &y1, &cv,
-		&t_step, &x_step, &y_step] () {
+		&t_step, &x_step, &y_step,
+		&t_count, &x_count, &y_count
+		
+		] () {
 			while(!tasks.empty()) {
 				Task task = tasks.front();
 				tasks.pop();
@@ -385,9 +333,9 @@ namespace autoreg {
 				newTasks.push_back(Task{t+1, x+1, y+1});
 				lock.lock();
 				for (size_t tn = 0; tn < newTasks.size(); tn++) {
-					if ((newTasks[tn].t<t1/t_step)&&
-							(newTasks[tn].x<x1/x_step)&&
-							(newTasks[tn].y<y1/y_step)) {
+					if ((newTasks[tn].t<t_count)&&
+							(newTasks[tn].x<x_count)&&
+							(newTasks[tn].y<y_count)) {
 						matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] -= 1;
 						if (matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] == 0) {
 							tasks.push(newTasks[tn]);
@@ -395,7 +343,7 @@ namespace autoreg {
 						}
 					}
 				}
-				if ((t==t1/t_step -1)&&(x==x1/x_step-1)&&(y==y1/y_step-1)) {
+				if ((t==t_count-1)&&(x==x_count-1)&&(y==y_count-1)) {
 					stopped = true;
 					//std::cout << "stopped" << std::endl;
 					cv.notify_all();
@@ -410,52 +358,6 @@ namespace autoreg {
 		}
 		
 		//===================================================================
-
-		//std::vector<Task> tasks;
-		//
-		//
-		//for (int s=0; s<=(t1+x1+y1-3); s++) {
-		//	int count = s;
-		//	const int start_t = std::max(0, count-x1-y1-2);
-		//	const int end_t = std::min(count, t1-1);
-		//	//std::cout << s << std::endl;
-		//	for (int t=start_t; t<=end_t; t++) {
-		//		count = s-t;
-		//		const int start_x = std::max(0,count-y1-1);
-		//		const int end_x = std::min(count,y1-1);
-		//		for (int x=start_x; x<=end_x; x++) {
-		//			//count -= x;
-		//			count = s-t-x;
-		//			Task task;
-		//			task.t = t;
-		//			task.x = x;
-		//			task.y = count;
-		//			tasks.push_back(task);
-		//			//std::cout << t << " : " << x << " : " << count << std::endl;
-		//		}
-		//	}
-		//	#pragma omp parallel for
-		//	for (size_t ii=0; ii<tasks.size(); ii++) {
-		//		int t = tasks[ii].t;
-		//		int x = tasks[ii].x;
-		//		int y = tasks[ii].y;
-		//		//if (t > 1390)
-		//		//	std::cout << t << " : " << x << " : " << y << std::endl;
-		//		const int m1 = std::min(t+1, fsize[0]);
-		//		const int m2 = std::min(x+1, fsize[1]);
-		//		const int m3 = std::min(y+1, fsize[2]);
-		//		T sum = 0;
-		//		for (int k=0; k<m1; k++)
-		//			for (int i=0; i<m2; i++)
-		//				for (int j=0; j<m3; j++)
-		//					sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
-		//		#pragma omp atomic
-		//		zeta(t, x, y) += sum;
-		//	}
-		//	tasks.clear();
-		//}
-
-
 
 
 		//for (int t=0; t<t1; t++) {
