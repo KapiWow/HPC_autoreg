@@ -191,31 +191,22 @@ namespace autoreg {
 			int y;
 		};
 
-
-		//=========================================================================
-		//
-
 		std::queue<Task> tasks;
-		std::vector<std::vector<std::vector<int>>> matrix;
 		std::mutex mtx;
-		//std::mutex mtxTable;
 		std::condition_variable cv;
-		size_t t_step = 40;
-		//size_t t_step = 40;
-		size_t x_step = 8;
-		size_t y_step = 8;
-		//size_t t_step = 50;
-		//size_t x_step = 8;
-		//size_t y_step = 8;
-		size_t t_count = ((t1 + t_step - 1)/t_step);
-		size_t x_count = ((x1 + x_step - 1)/x_step);
-		size_t y_count = ((y1 + y_step - 1)/y_step);
+		int t_step = 40;
+		int x_step = 8;
+		int y_step = 8;
+		int t_count = ((t1 + t_step - 1)/t_step);
+		int x_count = ((x1 + x_step - 1)/x_step);
+		int y_count = ((y1 + y_step - 1)/y_step);
 
-		for (size_t i = 0; i < t_count; i++) {
-			std::vector<std::vector<int>> a;
-			for (int j = 0; j < x_count; j++) {
-				std::vector<int> b;
-				for (int k = 0; k < y_count; k++) {
+		size3 matrixSize(t_count, x_count, y_count);
+		Array3D<int> matrix(matrixSize);
+
+		for (int i = 0; i < matrixSize[0]; i++) {
+			for (int j = 0; j < matrixSize[1]; j++) {
+				for (int k = 0; k < matrixSize[2]; k++) {
 					int c = 3;
 					if (i == 0)
 						c -= 1;	
@@ -223,131 +214,88 @@ namespace autoreg {
 						c -= 1;	
 					if (k == 0)
 						c -= 1;	
-					
-					
-					if (c==3)
+					//change matrix params
+					if (c == 3)
 						c = 7;
-					else if (c==2)
+					else if (c == 2)
 						c = 3;
+					matrix(i,j,k) = c;
 
-					b.push_back(c);
 				}
-				a.push_back(b);
-			}	
-			matrix.push_back(a);
+			}
 		}
 
-		std::cout << matrix[0][0][0] << std::endl;
+		//create initial task
 		Task task;
 		task.t = 0;
 		task.x = 0;
 		task.y = 0;
 		tasks.push(task);
-		std::cout << t1 << "  " << x1 << "   " << y1 << std::endl;
 		
 		std::atomic<bool> stopped{false};
 		#pragma omp parallel
 		{
-		std::unique_lock<std::mutex> lock{mtx};
-		cv.wait(lock, [&stopped, &matrix, &tasks, &lock, &zeta, &phi, &fsize, &t1, &x1, &y1, &cv,
-		&t_step, &x_step, &y_step,
-		&t_count, &x_count, &y_count
-		
-		] () {
-			while(!tasks.empty()) {
-				Task task = tasks.front();
-				tasks.pop();
-				//std::unlock_guard unlock{mtx};
-				//lock.unlock();
-				
-				int t = task.t;
-				int x = task.x;
-				int y = task.y;
-				//std::cout << t <<"   "<< x <<"   "<< y << std::endl;
-				//std::cout << t + x + y << std::endl;
+			std::unique_lock<std::mutex> lock{mtx};
+			cv.wait(lock, [&] () {
+				while (!tasks.empty()) {
+					Task task = tasks.front();
+					tasks.pop();
+					int t = task.t;
+					int x = task.x;
+					int y = task.y;
+					lock.unlock();
+					
+					int t_start = t*t_step;
+					int t_end = std::min((t+1)*t_step, t1);
+					int x_start = x*x_step;
+					int x_end = std::min((x+1)*x_step, x1);
+					int y_start = y*y_step;
+					int y_end = std::min((y+1)*y_step, y1);
+					
+					for (int t = t_start; t < t_end; t++)
+						for (int x = x_start; x < x_end; x++)
+							for (int y = y_start; y < y_end; y++) {
+								const int m1 = std::min(t+1, fsize[0]);
+								const int m2 = std::min(x+1, fsize[1]);
+								const int m3 = std::min(y+1, fsize[2]);
+								T sum = 0;
+								for (int k=0; k<m1; k++)
+									for (int i=0; i<m2; i++)
+										for (int j=0; j<m3; j++)
+											sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
+								zeta(t, x, y) += sum;
+							}
+					
+					std::vector<Task> newTasks;
+					newTasks.push_back(Task{t+1, x, y});
+					newTasks.push_back(Task{t, x+1, y});
+					newTasks.push_back(Task{t, x, y+1});
+					newTasks.push_back(Task{t+1, x+1, y});
+					newTasks.push_back(Task{t+1, x, y+1});
+					newTasks.push_back(Task{t, x+1, y+1});
+					newTasks.push_back(Task{t+1, x+1, y+1});
 
-				int t_start = t*t_step;
-				int t_end = std::min((t+1)*t_step, (size_t)t1);
-				//std::cout << " t " << t_start <<"   "<< t_end << std::endl;
-				
-				int x_start = x*x_step;
-				int x_end = std::min((x+1)*x_step, (size_t)x1);
-				//std::cout << " x " << x_start <<"   "<< x_end << std::endl;
-				
-				int y_start = y*y_step;
-				int y_end = std::min((y+1)*y_step, (size_t)y1);
-				//std::cout << " y " << y_start <<"   "<< y_end << std::endl;
-				lock.unlock();
-				
-				for (int t = t_start; t < t_end; t++)
-					for (int x = x_start; x < x_end; x++)
-						for (int y = y_start; y < y_end; y++) {
-							const int m1 = std::min(t+1, fsize[0]);
-							const int m2 = std::min(x+1, fsize[1]);
-							const int m3 = std::min(y+1, fsize[2]);
-							T sum = 0;
-							for (int k=0; k<m1; k++)
-								for (int i=0; i<m2; i++)
-									for (int j=0; j<m3; j++)
-										sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
-						#pragma omp atomic
-							zeta(t, x, y) += sum;
-						}
-				
-				
-				
-				std::vector<Task> newTasks;
-				newTasks.push_back(Task{t+1, x, y});
-				newTasks.push_back(Task{t, x+1, y});
-				newTasks.push_back(Task{t, x, y+1});
-				newTasks.push_back(Task{t+1, x+1, y});
-				newTasks.push_back(Task{t+1, x, y+1});
-				newTasks.push_back(Task{t, x+1, y+1});
-				newTasks.push_back(Task{t+1, x+1, y+1});
-				lock.lock();
-				for (size_t tn = 0; tn < newTasks.size(); tn++) {
-					if ((newTasks[tn].t<t_count)&&
-							(newTasks[tn].x<x_count)&&
-							(newTasks[tn].y<y_count)) {
-						matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] -= 1;
-						if (matrix[newTasks[tn].t][newTasks[tn].x][newTasks[tn].y] == 0) {
-							tasks.push(newTasks[tn]);
-							cv.notify_one();
+					if ((t==t_count-1)&&(x==x_count-1)&&(y==y_count-1)) {
+						stopped = true;
+						cv.notify_all();
+					}
+
+					lock.lock();
+					for (size_t tn = 0; tn < newTasks.size(); tn++) {
+						if ((newTasks[tn].t<t_count)&&
+								(newTasks[tn].x<x_count)&&
+								(newTasks[tn].y<y_count)) {
+							matrix(newTasks[tn].t, newTasks[tn].x, newTasks[tn].y) -= 1;
+							if (matrix(newTasks[tn].t, newTasks[tn].x, newTasks[tn].y) == 0) {
+								tasks.push(newTasks[tn]);
+								cv.notify_one();
+							}
 						}
 					}
 				}
-				if ((t==t_count-1)&&(x==x_count-1)&&(y==y_count-1)) {
-					stopped = true;
-					//std::cout << "stopped" << std::endl;
-					cv.notify_all();
-				}
-				//lock.unlock();
-
-			}
-			return stopped.load();
-			//bool res = stopped;
-			//return res;
-		});
+				return stopped.load();
+			});
 		}
-		
-		//===================================================================
-
-
-		//for (int t=0; t<t1; t++) {
-		//	for (int x=0; x<x1; x++) {
-		//		for (int y=0; y<y1; y++) {
-		//			const int m1 = std::min(t+1, fsize[0]);
-		//			const int m2 = std::min(x+1, fsize[1]);
-		//			const int m3 = std::min(y+1, fsize[2]);
-		//			T sum = 0;
-		//			for (int k=0; k<m1; k++)
-		//				for (int i=0; i<m2; i++)
-		//					for (int j=0; j<m3; j++)
-		//						sum += phi(k, i, j)*zeta(t-k, x-i, y-j);
-		//			zeta(t, x, y) += sum;
-		//		}
-		//	}
-		//}
 	}
 
 	template<class T, int N>

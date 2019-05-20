@@ -23,6 +23,7 @@ namespace autoreg {
 	template<class T> using ACF = blitz::Array<T,3>;
 	template<class T> using AR_coefs = blitz::Array<T,3>;
 	template<class T> using Zeta = blitz::Array<T,3>;
+	template<class T> using Array3D = blitz::Array<T,3>;
 	template<class T> using Array2D = blitz::Array<T,2>;
 	template<class T> using Array1D = blitz::Array<T,1>;
 
