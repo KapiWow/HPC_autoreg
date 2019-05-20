@@ -169,11 +169,13 @@ namespace autoreg {
 
 
 
-		parallel_mt generator(generators[0]);
 		// генерация и проверка
-		#pragma omp parallel for 
+		#pragma omp parallel
+		{
+        int tid = omp_get_thread_num();
+		parallel_mt generator(generators[tid]);
+		#pragma omp for 
 		for (int i = 0; i < size[0]; i++) {
-        	int tid = omp_get_thread_num();
         	//int tid = 0;
 			std::normal_distribution<T> normal(T(0), std::sqrt(variance));
 			
@@ -182,9 +184,12 @@ namespace autoreg {
 			for (int j = 0; j < size[1]; j++) {
 				for (int k = 0; k < size[2]; k++) {
 					//eps(i,j,k) = normal(generator);
-					eps(i,j,k) = normals[tid](generators[tid]);
+					//eps(i,j,k) = normals[tid](generators[tid]);
+					//eps(i,j,k) = normal(generators[tid]);
+					eps(i,j,k) = normal(generator);
 				}
 			}
+		}
 		}
 		
 		////инициализация генератора
