@@ -144,62 +144,30 @@ namespace autoreg {
 
 		Zeta<T> eps(size);
 		
-		
-
-		std::vector<parallel_mt> generators;
-		std::vector<std::normal_distribution<T>> normals;
-		int generator_count = 8;
-
-		for (int i = 0; i < generator_count; i++) {
+		#pragma omp parallel
+		{
+			//создание генераторов
+        	int tid = omp_get_thread_num();
 			std::string filename;
 			filename = "3_task/mt_";
-			filename += std::to_string(i);
+			filename += std::to_string(tid);
 			std::ifstream fin(filename);
 			mt_config conf;
 			fin >> conf;
 			parallel_mt generator(conf);
-			generators.push_back(generator);		
-			
 			std::normal_distribution<T> normal(T(0), std::sqrt(variance));
-			normals.push_back(normal);
-		}	
-
-
-
-
-
-
-		// генерация и проверка
-		#pragma omp parallel
-		{
-        int tid = omp_get_thread_num();
-		parallel_mt generator(generators[tid]);
-		#pragma omp for 
-		for (int i = 0; i < size[0]; i++) {
-        	//int tid = 0;
-			std::normal_distribution<T> normal(T(0), std::sqrt(variance));
-			
-			
-			
-			for (int j = 0; j < size[1]; j++) {
-				for (int k = 0; k < size[2]; k++) {
-					//eps(i,j,k) = normal(generator);
-					//eps(i,j,k) = normals[tid](generators[tid]);
-					//eps(i,j,k) = normal(generators[tid]);
-					eps(i,j,k) = normal(generator);
+			//генерация волн
+			#pragma omp for 
+			for (int i = 0; i < size[0]; i++) {
+				for (int j = 0; j < size[1]; j++) {
+					for (int k = 0; k < size[2]; k++) {
+						eps(i,j,k) = normal(generator);
+					}
 				}
 			}
 		}
-		}
 		
-		////инициализация генератора
-		//std::mt19937 generator;
-		//#if !defined(DISABLE_RANDOM_SEED)
-		//generator.seed(std::chrono::steady_clock::now().time_since_epoch().count());
-		//#endif
-
-		//std::normal_distribution<T> normal(T(0), std::sqrt(variance));
-		//std::generate(std::begin(eps), std::end(eps), std::bind(normal, generator));
+		//проверка
 		if (std::any_of(std::begin(eps), std::end(eps), &::autoreg::isnan<T>)) {
 			throw std::runtime_error("white noise generator produced some NaNs");
 		}
