@@ -13,8 +13,7 @@ CXXFLAGS += $(shell pkg-config --cflags blitz)
 
 # флаги сборки (библиотеки)
 LDFLAGS   = 
-#LDFLAGS  += -llapack -lblas -lgfortran
-LDFLAGS  += -llapack -lopenblaso -lgfortran -fopenmp -L ./3_tast -ldcmt
+LDFLAGS  += -llapack -lopenblaso -lgfortran -fopenmp -L ./3_task -ldcmt
 LDFLAGS  += $(shell pkg-config --libs blitz)
 
 SOURCES   = main.cc

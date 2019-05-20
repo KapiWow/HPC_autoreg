@@ -152,7 +152,7 @@ namespace autoreg {
 
 		for (int i = 0; i < generator_count; i++) {
 			std::string filename;
-			filename = "3_tast/mt_";
+			filename = "3_task/mt_";
 			filename += std::to_string(i);
 			std::ifstream fin(filename);
 			mt_config conf;
